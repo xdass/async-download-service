@@ -33,14 +33,20 @@ async def archivate(request):
     process = await create_subprocess_shell(f'zip -j -r - {os.path.join(path_to_images, "*.*")}', stdout=PIPE, stderr=PIPE)
 
     while True:
-        archive_chunk, stderr = await process.communicate()
-        if archive_chunk:
-            await asyncio.sleep(15)
-            logger.info(f'Sending archive chunk ...')
-            await response.write(archive_chunk)
-        else:
-            break
-    return web.Response()
+        try:
+            archive_chunk = await process.stdout.read(256)
+            if archive_chunk:
+                await asyncio.sleep(10)
+                print(archive_chunk)
+                logger.info(f'Sending archive chunk ...')
+                await response.write(archive_chunk)
+            else:
+                return response
+        except Exception as e:
+            process.send_signal(9)
+            raise
+        finally:
+            response.force_close()
 
 
 async def handle_index_page(request):
@@ -55,4 +61,4 @@ if __name__ == '__main__':
         web.get('/', handle_index_page),
         web.get('/archive/{archive_hash}/', archivate),
     ])
-    web.run_app(app)
+    web.run_app(app, host='127.0.0.1')
