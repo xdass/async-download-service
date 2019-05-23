@@ -16,7 +16,6 @@ logger.addHandler(ch)
 
 
 async def archivate(request, use_delay):
-    print(use_delay)
     archive_hash_idx = 2
     archive_hash = request.path.split('/')[archive_hash_idx]
     path_to_images = os.path.join(os.getcwd(), 'test_photos', archive_hash)
