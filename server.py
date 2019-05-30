@@ -2,12 +2,10 @@ import os
 import argparse
 import logging
 import asyncio
-from asyncio.subprocess import create_subprocess_shell, PIPE
+from asyncio.subprocess import create_subprocess_shell, create_subprocess_exec, PIPE
 import aiohttp
 from aiohttp import web
 import aiofiles
-
-INTERVAL_SECS = 1
 
 logger = logging.getLogger('download_server')
 logger.setLevel(logging.INFO)
@@ -15,10 +13,9 @@ ch = logging.StreamHandler()
 logger.addHandler(ch)
 
 
-async def archivate(request, use_delay):
-    archive_hash_idx = 2
-    archive_hash = request.path.split('/')[archive_hash_idx]
-    path_to_images = os.path.join(os.getcwd(), 'test_photos', archive_hash)
+async def archivate(request):
+    archive_hash = request.match_info['archive_hash']
+    path_to_images = os.path.join(os.getcwd(), images_folder, archive_hash)
 
     if not os.path.exists(path_to_images):
         raise aiohttp.web.HTTPNotFound(text='Запрашиваемый архив не существует или был удален!')
@@ -27,20 +24,19 @@ async def archivate(request, use_delay):
     response.headers['Content-Disposition'] = 'attachment; filename="photos.zip"'
     await response.prepare(request)
 
-    process = await create_subprocess_shell(f'zip -j -r - {os.path.join(path_to_images, "*.*")}', stdout=PIPE, stderr=PIPE)
-
+    all_images = os.path.join(path_to_images, "*.*")
+    process = await create_subprocess_shell(f'zip -j -r - {all_images}', stdout=PIPE, stderr=PIPE)
     try:
         while True:
             archive_chunk = await process.stdout.read(256)
-            if archive_chunk:
-                if use_delay:
-                    await asyncio.sleep(30)
-                logger.info(f'Sending archive chunk ...')
-                await response.write(archive_chunk)
-            else:
+            if not archive_chunk:
                 return response
+            if use_delay:
+                await asyncio.sleep(15)
+            logger.info(f'Sending archive chunk ...')
+            await response.write(archive_chunk)
     except asyncio.CancelledError:
-        process.send_signal(19)
+        await create_subprocess_exec("./rkill.sh", f"{process.pid}")
         raise
     finally:
         response.force_close()
@@ -54,14 +50,26 @@ async def handle_index_page(request):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Microservice for download files')
-    parser.add_argument('--logging', help='Enabled or Disabled logging(By default is Enabled)', type=bool, default=False)
-    parser.add_argument('--use_delay', help='Enabled delay before send chunk(for debuging)', type=bool, default=False)
+    parser.add_argument('-d', '--debug', help="Print lots of debugging statements",
+                        action="store_const",
+                        dest="loglevel",
+                        const=logging.DEBUG,
+                        default=logging.DEBUG)
+    parser.add_argument('-p', '--prod', help="Print info messages",
+                        action="store_const",
+                        dest="loglevel",
+                        default=logging.INFO,
+                        const=logging.INFO)
+    parser.add_argument('--use_delay',
+                        help='Enabled delay before send chunk(for debuging)',
+                        type=bool,
+                        default=False)
     parser.add_argument('images', metavar='i', help='Path to images folder')
     args = parser.parse_args()
-    logger_state = args.logging
+    logger_level = args.loglevel
     use_delay = args.use_delay
     images_folder = args.images
-    logger.disabled = logger_state
+    logger.setLevel(logger_level)
     full_path = os.path.join(images_folder, '{archive_hash}/')
 
     app = web.Application()
