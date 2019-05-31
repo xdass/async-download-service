@@ -34,6 +34,7 @@ async def archivate(request):
             if use_delay:
                 await asyncio.sleep(15)
             logger.info(f'Sending archive chunk ...')
+            logger.debug(f'Debug')
             await response.write(archive_chunk)
     except asyncio.CancelledError:
         await create_subprocess_exec("./rkill.sh", f"{process.pid}")
@@ -48,6 +49,15 @@ async def handle_index_page(request):
     return web.Response(text=index_contents, content_type='text/html')
 
 
+def main(images_folder, use_delay):
+    app = web.Application()
+    app.add_routes([
+        web.get('/', handle_index_page),
+        web.get('/archive/{archive_hash}/', archivate),
+    ])
+    web.run_app(app, host='127.0.0.1')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Microservice for download files')
     parser.add_argument('-d', '--debug', help="Print lots of debugging statements",
@@ -58,7 +68,6 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--prod', help="Print info messages",
                         action="store_const",
                         dest="loglevel",
-                        default=logging.INFO,
                         const=logging.INFO)
     parser.add_argument('--use_delay',
                         help='Enabled delay before send chunk(for debuging)',
@@ -70,11 +79,4 @@ if __name__ == '__main__':
     use_delay = args.use_delay
     images_folder = args.images
     logger.setLevel(logger_level)
-    full_path = os.path.join(images_folder, '{archive_hash}/')
-
-    app = web.Application()
-    app.add_routes([
-        web.get('/', handle_index_page),
-        web.get('/archive/{archive_hash}/', archivate),
-    ])
-    web.run_app(app, host='127.0.0.1')
+    main(images_folder, use_delay)
