@@ -1,4 +1,5 @@
 import os
+from functools import partial
 import argparse
 import logging
 import asyncio
@@ -13,7 +14,7 @@ ch = logging.StreamHandler()
 logger.addHandler(ch)
 
 
-async def archivate(request):
+async def archivate(request, images_folder, use_delay):
     archive_hash = request.match_info['archive_hash']
     path_to_images = os.path.join(os.getcwd(), images_folder, archive_hash)
 
@@ -51,9 +52,10 @@ async def handle_index_page(request):
 
 def main(images_folder, use_delay):
     app = web.Application()
+    partial_archivate = partial(archivate, images_folder=images_folder, use_delay=use_delay)
     app.add_routes([
         web.get('/', handle_index_page),
-        web.get('/archive/{archive_hash}/', archivate),
+        web.get('/archive/{archive_hash}/', partial_archivate),
     ])
     web.run_app(app, host='127.0.0.1')
 
